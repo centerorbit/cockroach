@@ -569,15 +569,66 @@ func (cfg *Config) parseGossipBootstrapResolvers() ([]resolver.Resolver, error) 
 			if len(address) == 0 {
 				continue
 			}
-			resolver, err := resolver.NewResolver(address)
-			if err != nil {
-				return nil, err
+
+			// Attempt to lookup all IP Addresses for a given DNS name
+			resolvers, err := resolveDNS(address)
+
+			if err == nil {
+				bootstrapResolvers = append(bootstrapResolvers, resolvers...)
+			}	else {
+				resolver, err := resolver.NewResolver(address)
+				if err != nil {
+					return nil, err
+				}
+				bootstrapResolvers = append(bootstrapResolvers, resolver)
 			}
-			bootstrapResolvers = append(bootstrapResolvers, resolver)
 		}
 	}
 
 	return bootstrapResolvers, nil
+}
+
+
+/**
+resolveDNS will attempt to take an `address` and perform a DNS
+lookup. If successful it will create Resolvers for all IPs returned.
+
+This function is important for situations such as Kubernetes and
+Docker DNS which take one name and "round-robin" all services
+that are scaled up under that name. Instead of connecting via name
+only, we need to resolve what all possible hosts are, and then
+connect to them individually.
+
+In the case that this function fails (returns an error) the application
+will continue/attempt with it's default behavior to make a
+resolver out of it anyways.
+ */
+func resolveDNS(address string) ([]resolver.Resolver, error) {
+	// First, determine if it's already an IP Address
+	if net.ParseIP(address) == nil {
+		// address is not a valid IP Address, it may be a DNS name
+		ips, err := net.LookupIP(address)
+		if err == nil {
+			return nil, errors.New("Address is not an IP, but lookup failed.")
+		}
+
+		if len(ips) == 1 {
+			return nil, errors.New("Only 1 IP for this name, so fallback to using this name for the resolver.")
+		}
+
+		var resolvers []resolver.Resolver
+		for _, ip := range ips {
+			resolver, err := resolver.NewResolver(ip.String())
+			if err != nil {
+				return nil, err
+			}
+			resolvers = append(resolvers, resolver)
+		}
+
+		return resolvers, nil
+	}
+
+	return nil, errors.New("Address is a valid IP Address, can't DNS resolve.")
 }
 
 // parseAttributes parses a colon-separated list of strings,
