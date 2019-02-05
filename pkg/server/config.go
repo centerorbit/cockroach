@@ -608,7 +608,7 @@ func resolveDNS(address string) ([]resolver.Resolver, error) {
 	if net.ParseIP(address) == nil {
 		// address is not a valid IP Address, it may be a DNS name
 		ips, err := net.LookupIP(address)
-		if err == nil {
+		if err != nil {
 			return nil, errors.New("Address is not an IP, but lookup failed.")
 		}
 
@@ -620,6 +620,7 @@ func resolveDNS(address string) ([]resolver.Resolver, error) {
 		for _, ip := range ips {
 			resolver, err := resolver.NewResolver(ip.String())
 			if err != nil {
+				//TODO(centerorbit): not exit out for one error, but maybe all?
 				return nil, err
 			}
 			resolvers = append(resolvers, resolver)
@@ -627,7 +628,6 @@ func resolveDNS(address string) ([]resolver.Resolver, error) {
 
 		return resolvers, nil
 	}
-
 	return nil, errors.New("Address is a valid IP Address, can't DNS resolve.")
 }
 
